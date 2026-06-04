@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Veritas</string>
+    <string name="tagline">Real people. Real students. Real connections.</string>
+    <string name="email_hint">you@college.edu</string>
+    <string name="send_magic_link">Send Magic Link</string>
+    <string name="check_inbox">Check your inbox for the login link</string>
+    <string name="college_select">Select your college</string>
+    <string name="continue_btn">Continue</string>
+    <string name="save_btn">Save</string>
+    <string name="logout">Log out</string>
+    <string name="delete_account">Delete account</string>
+</resources>

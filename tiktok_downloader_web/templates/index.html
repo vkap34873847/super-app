@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TikTok Mass Downloader</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">TikTok Mass Downloader</h1>
+            <p class="text-gray-600 mt-2">Download TikTok videos from URLs, users, hashtags, or batch files</p>
+        </header>
+
+        <div class="max-w-2xl mx-auto bg-white rounded-xl shadow-md p-6">
+            <form id="downloadForm" class="space-y-4">
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">Download Type</label>
+                    <div class="flex space-x-3" id="tabGroup">
+                        <button type="button" data-form-type="url" class="tab-btn px-4 py-2 border rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-500 text-white border-blue-500">URL</button>
+                        <button type="button" data-form-type="user" class="tab-btn px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">User</button>
+                        <button type="button" data-form-type="hashtag" class="tab-btn px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">Hashtag</button>
+                        <button type="button" data-form-type="file" class="tab-btn px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">Batch File</button>
+                    </div>
+                </div>
+
+                <div id="formContent">
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">TikTok URLs (one per line)</label>
+                        <textarea name="identifier" id="identifierInput" rows="6"
+                                  placeholder="https://www.tiktok.com/@user/video/123&#10;https://www.tiktok.com/@user/video/456&#10;https://vm.tiktok.com/xxxx"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                                  required></textarea>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-3">
+                    <label class="text-sm text-gray-600">Max Videos (0 = all):</label>
+                    <input type="number" name="count" id="countInput" value="0" min="0"
+                           class="w-20 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="text-sm text-gray-600 ml-4">Workers:</label>
+                    <input type="number" name="workers" id="workersInput" value="4" min="1" max="10"
+                           class="w-20 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <button type="submit"
+                        class="w-full bg-blue-600 text-white px-6 py-3 rounded-md font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-100 focus:ring-blue-500 transition-colors"
+                        id="submitBtn">
+                    Start Download
+                </button>
+            </form>
+        </div>
+
+        <!-- Alert / Error -->
+        <div id="alert" class="max-w-2xl mx-auto mt-4 hidden"></div>
+
+        <!-- Task Status -->
+        <div id="taskStatus" class="max-w-2xl mx-auto mt-8 hidden">
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h2 class="text-xl font-bold mb-4">Download Progress</h2>
+                <div id="taskDetails" class="space-y-4">
+                    <div class="text-gray-600" id="taskMessage">Initializing...</div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="taskProgress" class="bg-blue-600 h-2.5 rounded-full transition-all" style="width: 0%"></div>
+                    </div>
+                    <div class="flex justify-between text-sm text-gray-500" id="taskStats">
+                        <span>0/0</span>
+                        <span>✓ 0 | ✗ 0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <div id="fileList" class="text-sm text-gray-600 flex-1"></div>
+                        <button id="cancelBtn" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 disabled:opacity-50" disabled>
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loading" class="hidden fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+            <div class="bg-white rounded-lg p-6 text-center">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p class="text-gray-700">Processing...</p>
+            </div>
+        </div>
+
+        <script>
+            let currentTaskId = null;
+            let taskPollInterval = null;
+            let currentTab = 'url';
+
+            const partials = {
+                url: `
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">TikTok URLs (one per line)</label>
+                        <textarea name="identifier" id="identifierInput" rows="6"
+                                  placeholder="https://www.tiktok.com/@user/video/123&#10;https://www.tiktok.com/@user/video/456&#10;https://vm.tiktok.com/xxxx"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                                  required></textarea>
+                    </div>`,
+                user: `
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">Username</label>
+                        <input type="text" name="identifier" id="identifierInput"
+                               placeholder="@username"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               required>
+                    </div>`,
+                hashtag: `
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">Hashtag</label>
+                        <input type="text" name="identifier" id="identifierInput"
+                               placeholder="#tiktok"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               required>
+                    </div>`,
+                file: `
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">Upload .txt file with URLs (one per line)</label>
+                        <input type="file" name="file" id="fileInput" accept=".txt"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               required>
+                    </div>`
+            };
+
+            // Tab switching
+            document.getElementById('tabGroup').addEventListener('click', function(e) {
+                const btn = e.target.closest('.tab-btn');
+                if (!btn) return;
+
+                const tab = btn.getAttribute('data-form-type');
+                if (!tab) return;
+
+                currentTab = tab;
+
+                document.querySelectorAll('.tab-btn').forEach(b => {
+                    b.className = 'tab-btn px-4 py-2 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50';
+                });
+                btn.className = 'tab-btn px-4 py-2 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-500 text-white border-blue-500';
+
+                document.getElementById('formContent').innerHTML = partials[tab];
+            });
+
+            // Show alert
+            function showAlert(message, type) {
+                const alert = document.getElementById('alert');
+                alert.className = 'max-w-2xl mx-auto mt-4 p-4 rounded-md ' +
+                    (type === 'error' ? 'bg-red-100 text-red-700 border border-red-400' :
+                     type === 'success' ? 'bg-green-100 text-green-700 border border-green-400' :
+                     'bg-yellow-100 text-yellow-700 border border-yellow-400');
+                alert.textContent = message;
+                alert.classList.remove('hidden');
+                setTimeout(() => alert.classList.add('hidden'), 8000);
+            }
+
+            // Form submission
+            document.getElementById('downloadForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const submitBtn = document.getElementById('submitBtn');
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Starting...';
+
+                try {
+                    let body;
+
+                    if (currentTab === 'file') {
+                        const fileInput = document.getElementById('fileInput');
+                        if (!fileInput || !fileInput.files.length) {
+                            showAlert('Please select a file', 'error');
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Start Download';
+                            return;
+                        }
+                        const formData = new FormData();
+                        formData.append('file', fileInput.files[0]);
+                        const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+                        const data = await resp.json();
+                        if (data.error) {
+                            showAlert(data.error, 'error');
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Start Download';
+                            return;
+                        }
+                        body = data;
+                    } else {
+                        const identifier = document.getElementById('identifierInput').value;
+                        if (!identifier) {
+                            showAlert('Please enter a ' + currentTab, 'error');
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Start Download';
+                            return;
+                        }
+                        const count = parseInt(document.getElementById('countInput').value) || 0;
+                        const workers = parseInt(document.getElementById('workersInput').value) || 4;
+
+                        const resp = await fetch('/api/download', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                type: currentTab,
+                                identifier: identifier,
+                                options: { count, workers }
+                            })
+                        });
+                        const data = await resp.json();
+                        if (data.error) {
+                            showAlert(data.error, 'error');
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Start Download';
+                            return;
+                        }
+                        body = data;
+                    }
+
+                    const taskId = body.task_id;
+                    if (!taskId) {
+                        showAlert('No task ID returned', 'error');
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Start Download';
+                        return;
+                    }
+
+                    const statusEl = document.getElementById('taskStatus');
+                    statusEl.classList.remove('hidden');
+                    statusEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    startTaskPolling(taskId);
+
+                } catch (err) {
+                    showAlert('Request failed: ' + err.message, 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Start Download';
+                }
+            });
+
+            // Task polling
+            function startTaskPolling(taskId) {
+                currentTaskId = taskId;
+                document.getElementById('cancelBtn').disabled = false;
+                document.getElementById('fileList').innerHTML = '';
+
+                taskPollInterval = setInterval(async () => {
+                    try {
+                        const resp = await fetch('/api/task/' + taskId);
+                        if (!resp.ok) {
+                            stopTaskPolling();
+                            showAlert('Task lookup failed', 'error');
+                            return;
+                        }
+                        const data = await resp.json();
+                        updateTaskStatus(data);
+
+                        if (data.status === 'dubbing' || data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
+                            if (data.status !== 'dubbing') {
+                                stopTaskPolling();
+                            }
+                        }
+                    } catch (e) {
+                        stopTaskPolling();
+                    }
+                }, 1000);
+            }
+
+            function stopTaskPolling() {
+                if (taskPollInterval) {
+                    clearInterval(taskPollInterval);
+                    taskPollInterval = null;
+                }
+                document.getElementById('submitBtn').disabled = false;
+                document.getElementById('submitBtn').textContent = 'Start Download';
+            }
+
+            function updateTaskStatus(data) {
+                document.getElementById('taskMessage').textContent = data.message || '';
+                document.getElementById('taskProgress').style.width = Math.min((data.progress || 0), 100) + '%';
+
+                var completed = data.completed || 0;
+                var failed = data.failed || 0;
+                var total = data.total || (completed + failed);
+                var speed = data.speed || 0;
+                var eta = data.eta || '';
+                var workers = data.workers || '-';
+
+                var speedStr = speed > 0
+                    ? (speed > 1 ? speed.toFixed(1) + '/s' : (speed * 60).toFixed(0) + '/min')
+                    : '';
+                var extra = speedStr ? ' | ' + speedStr + (eta ? ' | ETA: ' + eta : '') + ' | ' + workers + ' workers' : '';
+
+                document.getElementById('taskStats').innerHTML =
+                    '<span>' + (completed + failed) + '/' + total + extra + '</span>' +
+                    '<span>\u2713 ' + completed + ' | \u2717 ' + failed + '</span>';
+
+                var fl = document.getElementById('fileList');
+
+                if (data.status === 'dubbing') {
+                    document.getElementById('cancelBtn').disabled = true;
+                    var html = '<div class="text-xs font-semibold text-gray-500 mt-2 mb-1">DUBBING PROGRESS:</div>';
+                    if (data.dub_files) {
+                        var df = data.dub_files;
+                        var dcomplete = 0, dfail = 0;
+                        Object.keys(df).forEach(function(k) {
+                            var s = df[k];
+                            var icon = s.status === 'completed' ? '\u2705' : s.status === 'failed' ? '\u274C' : s.status === 'verifying' ? '\uD83D\uDD0D' : '\u23F3';
+                            var retryInfo = s.retries > 0 ? ' (retry ' + s.retries + ')' : '';
+                            html += '<div class="flex items-center gap-1 text-xs mt-1"><span>' + icon + '</span><span class="truncate flex-1">' + k + '</span><span class="text-gray-500">' + s.message + retryInfo + '</span></div>';
+                            if (s.status === 'completed') dcomplete++;
+                            if (s.status === 'failed') dfail++;
+                        });
+                        html += '<div class="text-xs text-gray-400 mt-2">Dub: ' + dcomplete + ' done, ' + dfail + ' failed</div>';
+                    }
+                    fl.innerHTML = html;
+                    document.getElementById('submitBtn').disabled = false;
+                    document.getElementById('submitBtn').textContent = 'Start Download';
+                } else if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
+                    document.getElementById('submitBtn').disabled = false;
+                    document.getElementById('submitBtn').textContent = 'Start Download';
+                    document.getElementById('cancelBtn').disabled = true;
+                    if (data.status === 'completed' && data.files && data.files.length > 0) {
+                        document.getElementById('taskMessage').textContent = 'Downloads: ' + data.files.length + ' file(s)';
+                        fl.innerHTML = '<div class="text-xs font-semibold text-gray-500 mt-2 mb-1">ORIGINAL FILES:</div>';
+                        data.files.forEach(function(f) {
+                            var div = document.createElement('div');
+                            div.className = 'flex items-center gap-2 mt-1';
+                            var timeStr = '';
+                            if (f.downloaded_at) {
+                                var d = new Date(f.downloaded_at * 1000);
+                                timeStr = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                            }
+                            var sizeStr = f.size ? ' (' + (f.size/1024/1024).toFixed(1) + 'MB)' : '';
+                            var a = document.createElement('a');
+                            a.href = '/api/task/' + currentTaskId + '/file/' + encodeURIComponent(f.name);
+                            a.download = f.name;
+                            a.textContent = '\u2B07 ' + f.name;
+                            a.className = 'text-blue-600 hover:text-blue-800 text-sm underline';
+                            div.appendChild(a);
+                            var span = document.createElement('span');
+                            span.className = 'text-gray-400 text-xs';
+                            span.textContent = timeStr + sizeStr;
+                            div.appendChild(span);
+                            var dubBtn = document.createElement('button');
+                            dubBtn.textContent = '\uD83C\uDDEE\uD83C\uDDF3 Dub to Hindi';
+                            dubBtn.className = 'ml-2 px-2 py-1 bg-purple-500 text-white text-xs rounded hover:bg-purple-600 dub-btn';
+                            dubBtn.dataset.filename = f.name;
+                            div.appendChild(dubBtn);
+                            fl.appendChild(div);
+                        });
+                        // Show dubbed files section if any
+                        if (data.dub_files) {
+                            var dubHtml = '<div class="text-xs font-semibold text-green-600 mt-3 mb-1">DUBBED FILES:</div>';
+                            Object.keys(data.dub_files).forEach(function(k) {
+                                var s = data.dub_files[k];
+                                if (s.status === 'completed' && s.output_name) {
+                                    var a2 = document.createElement('a');
+                                    a2.href = '/api/task/' + currentTaskId + '/file/dubbed/' + encodeURIComponent(s.output_name);
+                                    a2.download = s.output_name;
+                                    a2.textContent = '\uD83C\uDDEE\uD83C\uDDF3 Download ' + s.output_name;
+                                    a2.className = 'text-green-600 hover:text-green-800 text-sm underline block mt-1';
+                                    fl.appendChild(a2);
+                                }
+                            });
+                        }
+                    } else {
+                        fl.innerHTML = '';
+                    }
+                } else {
+                    document.getElementById('cancelBtn').disabled = false;
+                    fl.innerHTML = '';
+                }
+            }
+
+            // Cancel
+            document.getElementById('cancelBtn').addEventListener('click', async () => {
+                if (!currentTaskId) return;
+                document.getElementById('cancelBtn').disabled = true;
+                document.getElementById('taskMessage').textContent = 'Cancelling...';
+                const resp = await fetch('/api/task/' + currentTaskId + '/cancel', { method: 'POST' });
+                const data = await resp.json();
+                if (data.files && data.files.length > 0) {
+                    document.getElementById('taskMessage').textContent = 'Downloading ' + data.files.length + ' file(s)...';
+                    data.files.forEach(function(f) {
+                        var a = document.createElement('a');
+                        a.href = '/api/task/' + currentTaskId + '/file/' + encodeURIComponent(f.name);
+                        a.download = f.name;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                    });
+                }
+            });
+
+        </script>
+    </div>
+</body>
+</html>

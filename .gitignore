@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+venv/
+.env
+
+# Project data (generated)
+trading_bot/ohlcv_cache.pkl
+trading_bot/fundamentals_cache.json
+trading_bot/backtest_results/
+trading_bot/portfolio.json
+
+# TikTok downloader large data
+downloads/
+tiktok_downloader_web/downloads/
+
+# Node
+node_modules/
+package-lock.json
+package.json
+
+# OS
+.DS_Store
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+/tmp/
+
+# Gradle / Android
+.gradle/
+the-playbook/.gradle/
+the-playbook/local.properties
+the-playbook/app/google-services.json
+veritas/.gradle/
+veritas/local.properties
+veritas/google-services.json
+*.apk
+*.aab
+*.jar
+
+# Large binary
+*.pkl
+*.pickle
+*.zip
