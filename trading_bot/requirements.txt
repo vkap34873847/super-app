@@ -5,3 +5,4 @@ yfinance>=0.2.0
 nsetools>=2.0
 requests>=2.31
 gunicorn>=23.0
+ta>=0.11.0
