@@ -6,3 +6,4 @@ nsetools>=2.0
 requests>=2.31
 gunicorn>=23.0
 ta>=0.11.0
+httpx>=0.27.0
